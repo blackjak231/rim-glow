@@ -1,6 +1,6 @@
 // Every example card: they share the settings, each keeps its own animation.
 const glows = [...document.querySelectorAll("rim-glow.demo-card")];
-const STORAGE_KEY = "rim-glow-demo-v16";
+const STORAGE_KEY = "rim-glow-demo-v17";
 
 // Positions in the 3x3 mesh, in the source order. The labels say where each color shows.
 const COLORS = [
@@ -69,6 +69,7 @@ const SECTIONS = [
         fields: [
             { key: "gradientSpeed", label: "Gradient speed", type: "range", min: 0, max: 4, step: 0.05, value: 0.8, unit: "×", kind: "attr", attr: "gradient-speed" },
             { key: "blobSpeed", label: "Blob speed", type: "range", min: 0, max: 4, step: 0.05, value: 0.7, unit: "×", kind: "attr", attr: "blob-speed" },
+            { key: "autoSize", label: "Scale with the element size", type: "toggle", value: true, kind: "autoSize" },
             { key: "wobble", label: "Blob amplitude", type: "range", min: 0, max: 40, step: 1, value: 8, unit: "px", kind: "var", name: "--rim-glow-wobble" },
             { key: "blur", label: "Glow thickness (blur)", type: "range", min: 0, max: 80, step: 1, value: 28, unit: "px", kind: "var", name: "--rim-glow-blur" },
             { key: "duration", label: "Fade-in duration", type: "range", min: 0.1, max: 3, step: 0.05, value: 0.9, unit: "s", kind: "var", name: "--rim-glow-duration" },
@@ -291,6 +292,15 @@ function apply(field) {
                     glow.style.setProperty("--rim-glow-radius", `${state.radius}px`);
                 } else {
                     glow.style.removeProperty("--rim-glow-radius");
+                }
+            }
+            break;
+        case "autoSize":
+            for (const glow of glows) {
+                if (value) {
+                    glow.style.removeProperty("--rim-glow-scale");
+                } else {
+                    glow.style.setProperty("--rim-glow-scale", "1");
                 }
             }
             break;
@@ -596,6 +606,9 @@ function code() {
 
     if (state.radiusMode === "fixed") {
         variables.push(`    --rim-glow-radius: ${state.radius}px;`);
+    }
+    if (!state.autoSize) {
+        variables.push("    --rim-glow-scale: 1;");
     }
 
     const opening = ["<rim-glow", ...attributes].join(" ");

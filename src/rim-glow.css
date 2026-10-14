@@ -138,7 +138,14 @@
     --rg-wobble: var(--rim-glow-wobble, 8px);
     --rg-ripple-speed: var(--rim-glow-ripple-speed, 1);
     --rg-press: var(--rim-glow-press-size, 100px);
-    --rg-pad: 120px;
+    /*
+     * Size factor: the smaller side of the element over 393 px (the source iPhone screen), within
+     * 0.2 and 2. Blur, wobble, polygon inset and rim follow it, so a button and a desktop screen
+     * get the same look as the source phone. --rim-glow-scale forces a fixed factor (1 = pixel
+     * values as written). cqmin resolves inside .rim-glow__layers, the size container.
+     */
+    --rg-size: var(--rim-glow-scale, clamp(0.2, tan(atan2(100cqmin, 393px)), 2));
+    --rg-pad: calc(120px * max(1, var(--rg-size)));
 
     position: relative;
     display: block;
@@ -285,6 +292,7 @@
     position: absolute;
     inset: 0;
     display: none;
+    --rg-blur: calc(8px * var(--rg-size));
     filter: blur(var(--rg-blur));
     animation:
         rg-clock-base calc(6283.1853s / var(--rim-glow-gradient-speed, 0.8)) linear infinite,
@@ -307,14 +315,14 @@
     display: block;
     animation-play-state: running, running, running, running;
     --rg-scale: 1;
-    --rg-blur: var(--rim-glow-blur, 28px);
+    --rg-blur: calc(var(--rim-glow-blur, 28px) * var(--rg-size));
     --rg-mesh-opacity: 1;
 }
 
 @starting-style {
     .rim-glow[data-active] .rim-glow__glow {
         --rg-scale: 1.2;
-        --rg-blur: 8px;
+        --rg-blur: calc(8px * var(--rg-size));
         --rg-mesh-opacity: 0;
     }
 }
@@ -332,41 +340,44 @@
     --rg-w: tan(atan2(100cqw, 1px));
     --rg-h: tan(atan2(100cqh, 1px));
     --rg-t: calc(var(--rg-blob-base) + var(--rg-blob-boost));
+    --rg-inset: calc(8px * var(--rg-size));
+    --rg-corner: calc(56px * var(--rg-size));
+    --rg-amplitude: calc(var(--rg-wobble) * var(--rg-size));
 
-    --rg-sx: calc(var(--rg-pad) + 50cqw + (8px - 50cqw) * var(--rg-scale));
-    --rg-sy: calc(var(--rg-pad) + 50cqh + (56px - 50cqh) * var(--rg-scale));
+    --rg-sx: calc(var(--rg-pad) + 50cqw + (var(--rg-inset) - 50cqw) * var(--rg-scale));
+    --rg-sy: calc(var(--rg-pad) + 50cqh + (var(--rg-corner) - 50cqh) * var(--rg-scale));
 
-    --rg-p0x: calc(var(--rg-pad) + 50cqw + (56px + var(--rg-wobble) * sin(var(--rg-j0x, 0) + var(--rg-t) + 0.8) - 50cqw) * var(--rg-scale));
-    --rg-p0y: calc(var(--rg-pad) + 50cqh + (8px + var(--rg-wobble) * sin(var(--rg-j0y, 0) + var(--rg-t) + 5.6) - 50cqh) * var(--rg-scale));
-    --rg-p1x: calc(var(--rg-pad) + 50cqw + ((25 + var(--rg-s1, 0)) * 1cqw + 8px + var(--rg-wobble) * sin(var(--rg-j1x, 0) + var(--rg-t) + 0.8) - 50cqw) * var(--rg-scale));
-    --rg-p1y: calc(var(--rg-pad) + 50cqh + (8px + var(--rg-wobble) * sin(var(--rg-j1y, 0) + var(--rg-t) + 0.1 * (0.25 * var(--rg-w) + 8)) - 50cqh) * var(--rg-scale));
-    --rg-p2x: calc(var(--rg-pad) + 50cqw + ((75 + var(--rg-s2, 0)) * 1cqw + 8px + var(--rg-wobble) * sin(var(--rg-j2x, 0) + var(--rg-t) + 0.8) - 50cqw) * var(--rg-scale));
-    --rg-p2y: calc(var(--rg-pad) + 50cqh + (8px + var(--rg-wobble) * sin(var(--rg-j2y, 0) + var(--rg-t) + 0.1 * (0.75 * var(--rg-w) + 8)) - 50cqh) * var(--rg-scale));
+    --rg-p0x: calc(var(--rg-pad) + 50cqw + (var(--rg-corner) + var(--rg-amplitude) * sin(var(--rg-j0x, 0) + var(--rg-t) + 0.8) - 50cqw) * var(--rg-scale));
+    --rg-p0y: calc(var(--rg-pad) + 50cqh + (var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j0y, 0) + var(--rg-t) + 5.6) - 50cqh) * var(--rg-scale));
+    --rg-p1x: calc(var(--rg-pad) + 50cqw + ((25 + var(--rg-s1, 0)) * 1cqw + var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j1x, 0) + var(--rg-t) + 0.8) - 50cqw) * var(--rg-scale));
+    --rg-p1y: calc(var(--rg-pad) + 50cqh + (var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j1y, 0) + var(--rg-t) + 0.1 * (0.25 * var(--rg-w) + 8)) - 50cqh) * var(--rg-scale));
+    --rg-p2x: calc(var(--rg-pad) + 50cqw + ((75 + var(--rg-s2, 0)) * 1cqw + var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j2x, 0) + var(--rg-t) + 0.8) - 50cqw) * var(--rg-scale));
+    --rg-p2y: calc(var(--rg-pad) + 50cqh + (var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j2y, 0) + var(--rg-t) + 0.1 * (0.75 * var(--rg-w) + 8)) - 50cqh) * var(--rg-scale));
 
-    --rg-p4x: calc(var(--rg-pad) + 50cqw + (100cqw - 8px + var(--rg-wobble) * sin(var(--rg-j4x, 0) + var(--rg-t) + 5.6) - 50cqw) * var(--rg-scale));
-    --rg-p4y: calc(var(--rg-pad) + 50cqh + (56px + var(--rg-wobble) * sin(var(--rg-j4y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
-    --rg-p5x: calc(var(--rg-pad) + 50cqw + (100cqw - 8px + var(--rg-wobble) * sin(var(--rg-j5x, 0) + var(--rg-t) + 0.1 * (0.25 * var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
-    --rg-p5y: calc(var(--rg-pad) + 50cqh + ((25 + var(--rg-s5, 0)) * 1cqh - 8px + var(--rg-wobble) * sin(var(--rg-j5y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
-    --rg-p6x: calc(var(--rg-pad) + 50cqw + (100cqw - 8px + var(--rg-wobble) * sin(var(--rg-j6x, 0) + var(--rg-t) + 0.1 * (0.75 * var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
-    --rg-p6y: calc(var(--rg-pad) + 50cqh + ((75 + var(--rg-s6, 0)) * 1cqh - 8px + var(--rg-wobble) * sin(var(--rg-j6y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
-    --rg-p7x: calc(var(--rg-pad) + 50cqw + (100cqw - 8px + var(--rg-wobble) * sin(var(--rg-j7x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 56)) - 50cqw) * var(--rg-scale));
-    --rg-p7y: calc(var(--rg-pad) + 50cqh + (100cqh - 56px + var(--rg-wobble) * sin(var(--rg-j7y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
+    --rg-p4x: calc(var(--rg-pad) + 50cqw + (100cqw - var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j4x, 0) + var(--rg-t) + 5.6) - 50cqw) * var(--rg-scale));
+    --rg-p4y: calc(var(--rg-pad) + 50cqh + (var(--rg-corner) + var(--rg-amplitude) * sin(var(--rg-j4y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
+    --rg-p5x: calc(var(--rg-pad) + 50cqw + (100cqw - var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j5x, 0) + var(--rg-t) + 0.1 * (0.25 * var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p5y: calc(var(--rg-pad) + 50cqh + ((25 + var(--rg-s5, 0)) * 1cqh - var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j5y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
+    --rg-p6x: calc(var(--rg-pad) + 50cqw + (100cqw - var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j6x, 0) + var(--rg-t) + 0.1 * (0.75 * var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p6y: calc(var(--rg-pad) + 50cqh + ((75 + var(--rg-s6, 0)) * 1cqh - var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j6y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
+    --rg-p7x: calc(var(--rg-pad) + 50cqw + (100cqw - var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j7x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 56)) - 50cqw) * var(--rg-scale));
+    --rg-p7y: calc(var(--rg-pad) + 50cqh + (100cqh - var(--rg-corner) + var(--rg-amplitude) * sin(var(--rg-j7y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
 
-    --rg-p8x: calc(var(--rg-pad) + 50cqw + (100cqw - 56px + var(--rg-wobble) * sin(var(--rg-j8x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
-    --rg-p8y: calc(var(--rg-pad) + 50cqh + (100cqh - 8px + var(--rg-wobble) * sin(var(--rg-j8y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 56)) - 50cqh) * var(--rg-scale));
-    --rg-p9x: calc(var(--rg-pad) + 50cqw + ((75 + var(--rg-s9, 0)) * 1cqw - 8px + var(--rg-wobble) * sin(var(--rg-j9x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
-    --rg-p9y: calc(var(--rg-pad) + 50cqh + (100cqh - 8px + var(--rg-wobble) * sin(var(--rg-j9y, 0) + var(--rg-t) + 0.1 * (0.75 * var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
-    --rg-p10x: calc(var(--rg-pad) + 50cqw + ((25 + var(--rg-s10, 0)) * 1cqw - 8px + var(--rg-wobble) * sin(var(--rg-j10x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
-    --rg-p10y: calc(var(--rg-pad) + 50cqh + (100cqh - 8px + var(--rg-wobble) * sin(var(--rg-j10y, 0) + var(--rg-t) + 0.1 * (0.25 * var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
-    --rg-p11x: calc(var(--rg-pad) + 50cqw + (56px + var(--rg-wobble) * sin(var(--rg-j11x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
-    --rg-p11y: calc(var(--rg-pad) + 50cqh + (100cqh - 8px + var(--rg-wobble) * sin(var(--rg-j11y, 0) + var(--rg-t) + 5.6) - 50cqh) * var(--rg-scale));
+    --rg-p8x: calc(var(--rg-pad) + 50cqw + (100cqw - var(--rg-corner) + var(--rg-amplitude) * sin(var(--rg-j8x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p8y: calc(var(--rg-pad) + 50cqh + (100cqh - var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j8y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 56)) - 50cqh) * var(--rg-scale));
+    --rg-p9x: calc(var(--rg-pad) + 50cqw + ((75 + var(--rg-s9, 0)) * 1cqw - var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j9x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p9y: calc(var(--rg-pad) + 50cqh + (100cqh - var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j9y, 0) + var(--rg-t) + 0.1 * (0.75 * var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
+    --rg-p10x: calc(var(--rg-pad) + 50cqw + ((25 + var(--rg-s10, 0)) * 1cqw - var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j10x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p10y: calc(var(--rg-pad) + 50cqh + (100cqh - var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j10y, 0) + var(--rg-t) + 0.1 * (0.25 * var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
+    --rg-p11x: calc(var(--rg-pad) + 50cqw + (var(--rg-corner) + var(--rg-amplitude) * sin(var(--rg-j11x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p11y: calc(var(--rg-pad) + 50cqh + (100cqh - var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j11y, 0) + var(--rg-t) + 5.6) - 50cqh) * var(--rg-scale));
 
-    --rg-p12x: calc(var(--rg-pad) + 50cqw + (8px + var(--rg-wobble) * sin(var(--rg-j12x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 56)) - 50cqw) * var(--rg-scale));
-    --rg-p12y: calc(var(--rg-pad) + 50cqh + (100cqh - 56px + var(--rg-wobble) * sin(var(--rg-j12y, 0) + var(--rg-t) + 0.8) - 50cqh) * var(--rg-scale));
-    --rg-p13x: calc(var(--rg-pad) + 50cqw + (8px + var(--rg-wobble) * sin(var(--rg-j13x, 0) + var(--rg-t) + 0.1 * (0.75 * var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
-    --rg-p13y: calc(var(--rg-pad) + 50cqh + ((75 + var(--rg-s13, 0)) * 1cqh - 8px + var(--rg-wobble) * sin(var(--rg-j13y, 0) + var(--rg-t) + 0.8) - 50cqh) * var(--rg-scale));
-    --rg-p14x: calc(var(--rg-pad) + 50cqw + (8px + var(--rg-wobble) * sin(var(--rg-j14x, 0) + var(--rg-t) + 0.1 * (0.25 * var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
-    --rg-p14y: calc(var(--rg-pad) + 50cqh + ((25 + var(--rg-s14, 0)) * 1cqh - 8px + var(--rg-wobble) * sin(var(--rg-j14y, 0) + var(--rg-t) + 0.8) - 50cqh) * var(--rg-scale));
+    --rg-p12x: calc(var(--rg-pad) + 50cqw + (var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j12x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 56)) - 50cqw) * var(--rg-scale));
+    --rg-p12y: calc(var(--rg-pad) + 50cqh + (100cqh - var(--rg-corner) + var(--rg-amplitude) * sin(var(--rg-j12y, 0) + var(--rg-t) + 0.8) - 50cqh) * var(--rg-scale));
+    --rg-p13x: calc(var(--rg-pad) + 50cqw + (var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j13x, 0) + var(--rg-t) + 0.1 * (0.75 * var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p13y: calc(var(--rg-pad) + 50cqh + ((75 + var(--rg-s13, 0)) * 1cqh - var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j13y, 0) + var(--rg-t) + 0.8) - 50cqh) * var(--rg-scale));
+    --rg-p14x: calc(var(--rg-pad) + 50cqw + (var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j14x, 0) + var(--rg-t) + 0.1 * (0.25 * var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p14y: calc(var(--rg-pad) + 50cqh + ((25 + var(--rg-s14, 0)) * 1cqh - var(--rg-inset) + var(--rg-amplitude) * sin(var(--rg-j14y, 0) + var(--rg-t) + 0.8) - 50cqh) * var(--rg-scale));
 
     position: absolute;
     inset: calc(-1 * var(--rg-pad));
@@ -592,10 +603,10 @@
  */
 .rim-glow__rim {
     position: absolute;
-    inset: -2px;
-    border: 4px solid var(--rim-glow-rim-color, #fff);
+    inset: calc(-2px * var(--rg-size));
+    border: calc(4px * var(--rg-size)) solid var(--rim-glow-rim-color, #fff);
     border-radius: var(--rim-glow-radius, inherit);
-    filter: blur(4px);
+    filter: blur(calc(4px * var(--rg-size)));
     opacity: 0;
     transition: opacity var(--rg-duration) var(--rg-easing);
 }

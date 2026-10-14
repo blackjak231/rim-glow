@@ -89,7 +89,7 @@ When the glow turns off later than a click (an API response), its wave starts fr
 ### A button that glows itself
 
 ```html
-<rim-glow id="ask" style="display: inline-block; border-radius: 999px; overflow: hidden; --rim-glow-blur: 8px; --rim-glow-wobble: 3px">
+<rim-glow id="ask" style="display: inline-block; border-radius: 999px; overflow: hidden">
     <button class="pill">Ask AI</button>
 </rim-glow>
 
@@ -101,7 +101,7 @@ When the glow turns off later than a click (an API response), its wave starts fr
 </script>
 ```
 
-The defaults are tuned for a screen-sized box. On a small element (a button, a field), lower the blur and the wobble as above, or the glow covers the whole element.
+Sizes follow the element: on a button the glow stays a thin, sharp ring, on a full screen it widens (see `--rim-glow-scale`).
 
 ### The whole screen
 
@@ -226,11 +226,12 @@ The state comes from the `data-active` attribute (rendered by the server, or tog
 |---|---|---|
 | `--rim-glow-gradient-speed` | `0.8` | Pace of the gradient (`1` = the original), for CSS-only usage (with the element, prefer `gradient-speed`, which does not jump when changed) |
 | `--rim-glow-blob-speed` | `0.7` | Pace of the blob, same (with the element, prefer `blob-speed`) |
-| `--rim-glow-wobble` | `8px` | Blob amplitude (`10px` = the original) |
+| `--rim-glow-scale` | automatic | Size factor applied to the blur, the wobble, the blob inset and the rim. By default it follows the element: its smaller side over 393 px (the original phone screen), between `0.2` and `2`. Set a number to force it (`1` = the pixel values as written) |
+| `--rim-glow-wobble` | `8px` | Blob amplitude at the reference size (`10px` = the original) |
 | `--rim-glow-flow-duration` | `12s` | With `flow`: time of a full turn |
 | `--rim-glow-flow-mix` | `1` | With `flow`: how much the turning colors cover the original mesh (`1` = fully) |
 | `--rim-glow-organic` | `1` | How far the points of the organic blob drift (`0` = the original blob, `2` = twice as far) |
-| `--rim-glow-blur` | `28px` | Glow thickness (blur of the edge) |
+| `--rim-glow-blur` | `28px` | Glow thickness (blur of the edge) at the reference size |
 | `--rim-glow-ripple-speed` | `1` | Wave speed (1 = 2000 px/s) |
 | `--rim-glow-press-size` | `100px` | Radius of the pressed area: the wave leaves from its edge, and the distortion swells there like a finger press instead of pinching a point (`0` = the original point) |
 | `--rim-glow-distort` | `0.7` | Distortion strength. `1` = the original (12 px for `svg`, 1 % scale for `css`) |
@@ -288,6 +289,7 @@ Measured against the author's video: the wave speed, the brightness peak (+15 %)
 
 ## Known differences
 
+- **Sizes follow the element**: the original is drawn for one phone screen. Here the blur, the wobble, the blob inset and the rim scale with the element's smaller side (393 px = the original), so a button or a desktop screen keeps the same proportions. `--rim-glow-scale: 1` keeps the fixed pixel values.
 - **Softer distortion by default**: the lens moves pixels by 0.7 of the original amplitude (`--rim-glow-distort: 1` restores it), from a 100 px pressed area.
 - **Calmer and organic by default**: the gradient runs at 0.8 of the original pace and the blob at 0.7, the blob moves by 8 px instead of 10, and its points drift on their own so the shape keeps changing. `gradient-speed="1"`, `blob-speed="1"`, `--rim-glow-wobble: 10px` and `blob="original"` restore the original.
 
