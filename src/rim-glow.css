@@ -1,0 +1,920 @@
+/*
+ * rim-glow: inspired by the SwiftUI prototype metasidd/Prototype-Siri-Screen-Animation.
+ *
+ * Layers, bottom to top, all drawn over the content:
+ * - scrim: optional dimming of the content
+ * - glow: animated mesh gradient, visible outside a wobbling polygon, blurred
+ * - rim: thin white stroke along the edges
+ * - ripple: the light wave triggered by a press
+ *
+ * Time: the source adds 0.03 to a shared timer every 10 ms from two timers. One always runs (3 units/s),
+ * the other only while active (another 3 units/s), so the wobble period is 2π / 6 ≈ 1.05 s while
+ * active. Here the gradient and the blob each get that pair of clocks (base + boost), so their
+ * paces can differ: --rim-glow-gradient-speed (0.8 by default) and --rim-glow-blob-speed (0.7),
+ * where 1 is the source. With the default wobble of 8 px instead of 10, a calmer look than the
+ * source. The clock range is a multiple of 2π: the wobble loops seamlessly, the mesh jumps once
+ * every 105 minutes or more. The glow is display: none while inactive, which restarts the clocks;
+ * the custom element carries them on through --rg-clock-*-delay.
+ */
+
+@property --rg-time-base {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0;
+}
+
+@property --rg-time-boost {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0;
+}
+
+@property --rg-blob-base {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0;
+}
+
+@property --rg-blob-boost {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0;
+}
+
+@property --rg-scale {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 1.2;
+}
+
+@property --rg-blur {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 8px;
+}
+
+@property --rg-mesh-opacity {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0;
+}
+
+@property --rg-flow-angle {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0deg;
+}
+
+@property --rg-ripple-r {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 0px;
+}
+
+@keyframes rg-clock-base {
+    to {
+        --rg-time-base: 18849.5559;
+    }
+}
+
+@keyframes rg-clock-boost {
+    to {
+        --rg-time-boost: 18849.5559;
+    }
+}
+
+@keyframes rg-blob-base {
+    to {
+        --rg-blob-base: 18849.5559;
+    }
+}
+
+@keyframes rg-blob-boost {
+    to {
+        --rg-blob-boost: 18849.5559;
+    }
+}
+
+/*
+ * Two identical keyframes: switching names restarts the wave without a reflow. The front starts at
+ * the edge of the pressed area (--rim-glow-press-size, a finger rather than a point).
+ */
+@keyframes rg-ripple-a {
+    from {
+        visibility: visible;
+        --rg-ripple-r: var(--rg-press);
+    }
+
+    to {
+        visibility: visible;
+        --rg-ripple-r: calc(6000px + var(--rg-press));
+    }
+}
+
+@keyframes rg-ripple-b {
+    from {
+        visibility: visible;
+        --rg-ripple-r: var(--rg-press);
+    }
+
+    to {
+        visibility: visible;
+        --rg-ripple-r: calc(6000px + var(--rg-press));
+    }
+}
+
+.rim-glow {
+    --rg-yellow: var(--rim-glow-yellow, #ffd60a);
+    --rg-purple: var(--rim-glow-purple, #bf5af2);
+    --rg-indigo: var(--rim-glow-indigo, #5e5ce6);
+    --rg-orange: var(--rim-glow-orange, #ff9f0a);
+    --rg-red: var(--rim-glow-red, #ff453a);
+    --rg-blue: var(--rim-glow-blue, #0a84ff);
+    --rg-indigo-2: var(--rim-glow-indigo-2, #5e5ce6);
+    --rg-green: var(--rim-glow-green, #30d158);
+    --rg-mint: var(--rim-glow-mint, #63e6e2);
+    --rg-duration: var(--rim-glow-duration, 0.9s);
+    --rg-easing: var(--rim-glow-easing, cubic-bezier(0.42, 0, 0.58, 1));
+    --rg-wobble: var(--rim-glow-wobble, 8px);
+    --rg-ripple-speed: var(--rim-glow-ripple-speed, 1);
+    --rg-press: var(--rim-glow-press-size, 100px);
+    --rg-pad: 120px;
+
+    position: relative;
+    display: block;
+}
+
+/*
+ * Color themes: the nine mesh colors, in the source order (top row, middle row, bottom row).
+ * A --rim-glow-<color> variable still overrides one color of any theme.
+ */
+.rim-glow[data-theme="aurora"] {
+    --rg-yellow: var(--rim-glow-yellow, #b6ff6a);
+    --rg-purple: var(--rim-glow-purple, #7c4dff);
+    --rg-indigo: var(--rim-glow-indigo, #3d5afe);
+    --rg-orange: var(--rim-glow-orange, #00e5a0);
+    --rg-red: var(--rim-glow-red, #1de9b6);
+    --rg-blue: var(--rim-glow-blue, #2979ff);
+    --rg-indigo-2: var(--rim-glow-indigo-2, #8e24aa);
+    --rg-green: var(--rim-glow-green, #00c853);
+    --rg-mint: var(--rim-glow-mint, #64ffda);
+}
+
+.rim-glow[data-theme="sunset"] {
+    --rg-yellow: var(--rim-glow-yellow, #ffd166);
+    --rg-purple: var(--rim-glow-purple, #ff6f91);
+    --rg-indigo: var(--rim-glow-indigo, #ff9671);
+    --rg-orange: var(--rim-glow-orange, #ffc75f);
+    --rg-red: var(--rim-glow-red, #f9484a);
+    --rg-blue: var(--rim-glow-blue, #ff5e78);
+    --rg-indigo-2: var(--rim-glow-indigo-2, #c34a36);
+    --rg-green: var(--rim-glow-green, #ffb347);
+    --rg-mint: var(--rim-glow-mint, #ff8c42);
+}
+
+.rim-glow[data-theme="ocean"] {
+    --rg-yellow: var(--rim-glow-yellow, #a0f0ff);
+    --rg-purple: var(--rim-glow-purple, #3a86ff);
+    --rg-indigo: var(--rim-glow-indigo, #4361ee);
+    --rg-orange: var(--rim-glow-orange, #4cc9f0);
+    --rg-red: var(--rim-glow-red, #4895ef);
+    --rg-blue: var(--rim-glow-blue, #00b4d8);
+    --rg-indigo-2: var(--rim-glow-indigo-2, #3f37c9);
+    --rg-green: var(--rim-glow-green, #48cae4);
+    --rg-mint: var(--rim-glow-mint, #90e0ef);
+}
+
+.rim-glow[data-theme="neon"] {
+    --rg-yellow: var(--rim-glow-yellow, #faff00);
+    --rg-purple: var(--rim-glow-purple, #ff00e5);
+    --rg-indigo: var(--rim-glow-indigo, #7a00ff);
+    --rg-orange: var(--rim-glow-orange, #ff2e93);
+    --rg-red: var(--rim-glow-red, #ff007a);
+    --rg-blue: var(--rim-glow-blue, #00e0ff);
+    --rg-indigo-2: var(--rim-glow-indigo-2, #8f00ff);
+    --rg-green: var(--rim-glow-green, #00ff9c);
+    --rg-mint: var(--rim-glow-mint, #00fff0);
+}
+
+.rim-glow[data-theme="ember"] {
+    --rg-yellow: var(--rim-glow-yellow, #ffb703);
+    --rg-purple: var(--rim-glow-purple, #d00000);
+    --rg-indigo: var(--rim-glow-indigo, #9d0208);
+    --rg-orange: var(--rim-glow-orange, #fb8500);
+    --rg-red: var(--rim-glow-red, #e85d04);
+    --rg-blue: var(--rim-glow-blue, #dc2f02);
+    --rg-indigo-2: var(--rim-glow-indigo-2, #6a040f);
+    --rg-green: var(--rim-glow-green, #f48c06);
+    --rg-mint: var(--rim-glow-mint, #ffba08);
+}
+
+.rim-glow[data-theme="pastel"] {
+    --rg-yellow: var(--rim-glow-yellow, #fff1a8);
+    --rg-purple: var(--rim-glow-purple, #d7b8ff);
+    --rg-indigo: var(--rim-glow-indigo, #b8c4ff);
+    --rg-orange: var(--rim-glow-orange, #ffd0a8);
+    --rg-red: var(--rim-glow-red, #ffb3c1);
+    --rg-blue: var(--rim-glow-blue, #a8d8ff);
+    --rg-indigo-2: var(--rim-glow-indigo-2, #c8b6ff);
+    --rg-green: var(--rim-glow-green, #b8f2c8);
+    --rg-mint: var(--rim-glow-mint, #a8f0e6);
+}
+
+.rim-glow[data-theme="mono"] {
+    --rg-yellow: var(--rim-glow-yellow, #ffffff);
+    --rg-purple: var(--rim-glow-purple, #e6e6e6);
+    --rg-indigo: var(--rim-glow-indigo, #cfcfcf);
+    --rg-orange: var(--rim-glow-orange, #f2f2f2);
+    --rg-red: var(--rim-glow-red, #ffffff);
+    --rg-blue: var(--rim-glow-blue, #d9d9d9);
+    --rg-indigo-2: var(--rim-glow-indigo-2, #bdbdbd);
+    --rg-green: var(--rim-glow-green, #f5f5f5);
+    --rg-mint: var(--rim-glow-mint, #e0e0e0);
+}
+
+.rim-glow[data-fixed] {
+    position: fixed;
+    inset: 0;
+    z-index: var(--rim-glow-z-index, 2147483000);
+    pointer-events: none;
+}
+
+.rim-glow__stage {
+    position: relative;
+    height: 100%;
+    border-radius: inherit;
+}
+
+/* Content with its own z-index must stay under the glow. Full height when the host has one. */
+.rim-glow__content {
+    position: relative;
+    height: 100%;
+    isolation: isolate;
+}
+
+/* Optional background image set by the custom element (image attribute), behind the content. */
+.rim-glow__image {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--rg-image, none) center / cover no-repeat;
+}
+
+.rim-glow__layers {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+    container-type: size;
+}
+
+.rim-glow__scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--rim-glow-scrim-color, #000);
+    opacity: 0;
+    transition: opacity var(--rg-duration) var(--rg-easing);
+}
+
+.rim-glow[data-active] .rim-glow__scrim {
+    opacity: var(--rim-glow-scrim, 0);
+}
+
+.rim-glow__glow {
+    position: absolute;
+    inset: 0;
+    display: none;
+    filter: blur(var(--rg-blur));
+    animation:
+        rg-clock-base calc(6283.1853s / var(--rim-glow-gradient-speed, 0.8)) linear infinite,
+        rg-clock-boost calc(6283.1853s / var(--rim-glow-gradient-speed, 0.8)) linear infinite paused,
+        rg-blob-base calc(6283.1853s / var(--rim-glow-blob-speed, 0.7)) linear infinite,
+        rg-blob-boost calc(6283.1853s / var(--rim-glow-blob-speed, 0.7)) linear infinite paused;
+    animation-delay:
+        var(--rg-clock-base-delay, 0s),
+        var(--rg-clock-boost-delay, 0s),
+        var(--rg-clock-base-delay, 0s),
+        var(--rg-clock-boost-delay, 0s);
+    transition:
+        --rg-scale var(--rg-duration) var(--rg-easing),
+        --rg-blur var(--rg-duration) var(--rg-easing),
+        --rg-mesh-opacity var(--rg-duration) var(--rg-easing),
+        display var(--rg-duration) allow-discrete;
+}
+
+.rim-glow[data-active] .rim-glow__glow {
+    display: block;
+    animation-play-state: running, running, running, running;
+    --rg-scale: 1;
+    --rg-blur: var(--rim-glow-blur, 28px);
+    --rg-mesh-opacity: 1;
+}
+
+@starting-style {
+    .rim-glow[data-active] .rim-glow__glow {
+        --rg-scale: 1.2;
+        --rg-blur: 8px;
+        --rg-mesh-opacity: 0;
+    }
+}
+
+/*
+ * The source masks the content with a blurred polygon (AnimatedRectangle: padding 8, corner cut 48,
+ * every point moved by 10 * sin(t + 0.1 * other coordinate)). Here the gradient is clipped to the
+ * outside of that polygon (even-odd hole) and its parent is blurred: the gradient is already smooth,
+ * so blurring the clipped gradient matches masking it with a blurred polygon.
+ * --rg-w and --rg-h turn the box size into plain numbers for the phases. --rg-jN* (phase) and
+ * --rg-sN (position of the mid-edge points, in % of the edge) are 0 in the source (and with
+ * data-blob="original"); the organic blob below makes them drift over time.
+ */
+.rim-glow__frame {
+    --rg-w: tan(atan2(100cqw, 1px));
+    --rg-h: tan(atan2(100cqh, 1px));
+    --rg-t: calc(var(--rg-blob-base) + var(--rg-blob-boost));
+
+    --rg-sx: calc(var(--rg-pad) + 50cqw + (8px - 50cqw) * var(--rg-scale));
+    --rg-sy: calc(var(--rg-pad) + 50cqh + (56px - 50cqh) * var(--rg-scale));
+
+    --rg-p0x: calc(var(--rg-pad) + 50cqw + (56px + var(--rg-wobble) * sin(var(--rg-j0x, 0) + var(--rg-t) + 0.8) - 50cqw) * var(--rg-scale));
+    --rg-p0y: calc(var(--rg-pad) + 50cqh + (8px + var(--rg-wobble) * sin(var(--rg-j0y, 0) + var(--rg-t) + 5.6) - 50cqh) * var(--rg-scale));
+    --rg-p1x: calc(var(--rg-pad) + 50cqw + ((25 + var(--rg-s1, 0)) * 1cqw + 8px + var(--rg-wobble) * sin(var(--rg-j1x, 0) + var(--rg-t) + 0.8) - 50cqw) * var(--rg-scale));
+    --rg-p1y: calc(var(--rg-pad) + 50cqh + (8px + var(--rg-wobble) * sin(var(--rg-j1y, 0) + var(--rg-t) + 0.1 * (0.25 * var(--rg-w) + 8)) - 50cqh) * var(--rg-scale));
+    --rg-p2x: calc(var(--rg-pad) + 50cqw + ((75 + var(--rg-s2, 0)) * 1cqw + 8px + var(--rg-wobble) * sin(var(--rg-j2x, 0) + var(--rg-t) + 0.8) - 50cqw) * var(--rg-scale));
+    --rg-p2y: calc(var(--rg-pad) + 50cqh + (8px + var(--rg-wobble) * sin(var(--rg-j2y, 0) + var(--rg-t) + 0.1 * (0.75 * var(--rg-w) + 8)) - 50cqh) * var(--rg-scale));
+
+    --rg-p4x: calc(var(--rg-pad) + 50cqw + (100cqw - 8px + var(--rg-wobble) * sin(var(--rg-j4x, 0) + var(--rg-t) + 5.6) - 50cqw) * var(--rg-scale));
+    --rg-p4y: calc(var(--rg-pad) + 50cqh + (56px + var(--rg-wobble) * sin(var(--rg-j4y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
+    --rg-p5x: calc(var(--rg-pad) + 50cqw + (100cqw - 8px + var(--rg-wobble) * sin(var(--rg-j5x, 0) + var(--rg-t) + 0.1 * (0.25 * var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p5y: calc(var(--rg-pad) + 50cqh + ((25 + var(--rg-s5, 0)) * 1cqh - 8px + var(--rg-wobble) * sin(var(--rg-j5y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
+    --rg-p6x: calc(var(--rg-pad) + 50cqw + (100cqw - 8px + var(--rg-wobble) * sin(var(--rg-j6x, 0) + var(--rg-t) + 0.1 * (0.75 * var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p6y: calc(var(--rg-pad) + 50cqh + ((75 + var(--rg-s6, 0)) * 1cqh - 8px + var(--rg-wobble) * sin(var(--rg-j6y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
+    --rg-p7x: calc(var(--rg-pad) + 50cqw + (100cqw - 8px + var(--rg-wobble) * sin(var(--rg-j7x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 56)) - 50cqw) * var(--rg-scale));
+    --rg-p7y: calc(var(--rg-pad) + 50cqh + (100cqh - 56px + var(--rg-wobble) * sin(var(--rg-j7y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
+
+    --rg-p8x: calc(var(--rg-pad) + 50cqw + (100cqw - 56px + var(--rg-wobble) * sin(var(--rg-j8x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p8y: calc(var(--rg-pad) + 50cqh + (100cqh - 8px + var(--rg-wobble) * sin(var(--rg-j8y, 0) + var(--rg-t) + 0.1 * (var(--rg-w) - 56)) - 50cqh) * var(--rg-scale));
+    --rg-p9x: calc(var(--rg-pad) + 50cqw + ((75 + var(--rg-s9, 0)) * 1cqw - 8px + var(--rg-wobble) * sin(var(--rg-j9x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p9y: calc(var(--rg-pad) + 50cqh + (100cqh - 8px + var(--rg-wobble) * sin(var(--rg-j9y, 0) + var(--rg-t) + 0.1 * (0.75 * var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
+    --rg-p10x: calc(var(--rg-pad) + 50cqw + ((25 + var(--rg-s10, 0)) * 1cqw - 8px + var(--rg-wobble) * sin(var(--rg-j10x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p10y: calc(var(--rg-pad) + 50cqh + (100cqh - 8px + var(--rg-wobble) * sin(var(--rg-j10y, 0) + var(--rg-t) + 0.1 * (0.25 * var(--rg-w) - 8)) - 50cqh) * var(--rg-scale));
+    --rg-p11x: calc(var(--rg-pad) + 50cqw + (56px + var(--rg-wobble) * sin(var(--rg-j11x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p11y: calc(var(--rg-pad) + 50cqh + (100cqh - 8px + var(--rg-wobble) * sin(var(--rg-j11y, 0) + var(--rg-t) + 5.6) - 50cqh) * var(--rg-scale));
+
+    --rg-p12x: calc(var(--rg-pad) + 50cqw + (8px + var(--rg-wobble) * sin(var(--rg-j12x, 0) + var(--rg-t) + 0.1 * (var(--rg-h) - 56)) - 50cqw) * var(--rg-scale));
+    --rg-p12y: calc(var(--rg-pad) + 50cqh + (100cqh - 56px + var(--rg-wobble) * sin(var(--rg-j12y, 0) + var(--rg-t) + 0.8) - 50cqh) * var(--rg-scale));
+    --rg-p13x: calc(var(--rg-pad) + 50cqw + (8px + var(--rg-wobble) * sin(var(--rg-j13x, 0) + var(--rg-t) + 0.1 * (0.75 * var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p13y: calc(var(--rg-pad) + 50cqh + ((75 + var(--rg-s13, 0)) * 1cqh - 8px + var(--rg-wobble) * sin(var(--rg-j13y, 0) + var(--rg-t) + 0.8) - 50cqh) * var(--rg-scale));
+    --rg-p14x: calc(var(--rg-pad) + 50cqw + (8px + var(--rg-wobble) * sin(var(--rg-j14x, 0) + var(--rg-t) + 0.1 * (0.25 * var(--rg-h) - 8)) - 50cqw) * var(--rg-scale));
+    --rg-p14y: calc(var(--rg-pad) + 50cqh + ((25 + var(--rg-s14, 0)) * 1cqh - 8px + var(--rg-wobble) * sin(var(--rg-j14y, 0) + var(--rg-t) + 0.8) - 50cqh) * var(--rg-scale));
+
+    position: absolute;
+    inset: calc(-1 * var(--rg-pad));
+    background: var(--rim-glow-backdrop, #000);
+    clip-path: polygon(
+        evenodd,
+        0 0,
+        100% 0,
+        100% 100%,
+        0 100%,
+        0 0,
+        var(--rg-sx) var(--rg-sy),
+        var(--rg-p0x) var(--rg-p0y),
+        var(--rg-p1x) var(--rg-p1y),
+        var(--rg-p2x) var(--rg-p2y),
+        var(--rg-p4x) var(--rg-p4y),
+        var(--rg-p5x) var(--rg-p5y),
+        var(--rg-p6x) var(--rg-p6y),
+        var(--rg-p7x) var(--rg-p7y),
+        var(--rg-p8x) var(--rg-p8y),
+        var(--rg-p9x) var(--rg-p9y),
+        var(--rg-p10x) var(--rg-p10y),
+        var(--rg-p11x) var(--rg-p11y),
+        var(--rg-p12x) var(--rg-p12y),
+        var(--rg-p13x) var(--rg-p13y),
+        var(--rg-p14x) var(--rg-p14y),
+        var(--rg-sx) var(--rg-sy)
+    );
+}
+
+/*
+ * Organic blob, the default (data-blob="original" turns it off): every point drifts on its own,
+ * forever. The mid-edge points
+ * slide along their edge (up to 10 % of it, cycles of 13 to 33 s at the default pace) and each
+ * wobble phase drifts slowly. Rates are fixed and incommensurate, so the shape never visibly
+ * repeats; the wobble amplitude is unchanged and its pace varies by a few percent at most.
+ * --rim-glow-organic scales the drift (1 by default, 0 = the original blob).
+ */
+.rim-glow:not([data-blob="original"]) .rim-glow__frame {
+    --rg-organic: var(--rim-glow-organic, 1);
+    --rg-j0x: calc(var(--rg-organic) * (0.8 * sin(0.0418 * var(--rg-t) + 4.827) + 0.4 * sin(0.0252 * var(--rg-t) + 5.073)));
+    --rg-j0y: calc(var(--rg-organic) * (0.8 * sin(0.0377 * var(--rg-t) + 2.249) + 0.4 * sin(0.0299 * var(--rg-t) + 3.306)));
+    --rg-j1x: calc(var(--rg-organic) * (0.8 * sin(0.0439 * var(--rg-t) + 2.740) + 0.4 * sin(0.0480 * var(--rg-t) + 1.951)));
+    --rg-j1y: calc(var(--rg-organic) * (0.8 * sin(0.0333 * var(--rg-t) + 0.377) + 0.4 * sin(0.0281 * var(--rg-t) + 5.281)));
+    --rg-j2x: calc(var(--rg-organic) * (0.8 * sin(0.0412 * var(--rg-t) + 3.162) + 0.4 * sin(0.0493 * var(--rg-t) + 3.928)));
+    --rg-j2y: calc(var(--rg-organic) * (0.8 * sin(0.0388 * var(--rg-t) + 1.656) + 0.4 * sin(0.0294 * var(--rg-t) + 2.651)));
+    --rg-j4x: calc(var(--rg-organic) * (0.8 * sin(0.0260 * var(--rg-t) + 2.109) + 0.4 * sin(0.0222 * var(--rg-t) + 0.697)));
+    --rg-j4y: calc(var(--rg-organic) * (0.8 * sin(0.0229 * var(--rg-t) + 0.302) + 0.4 * sin(0.0456 * var(--rg-t) + 1.740)));
+    --rg-j5x: calc(var(--rg-organic) * (0.8 * sin(0.0479 * var(--rg-t) + 6.099) + 0.4 * sin(0.0469 * var(--rg-t) + 0.565)));
+    --rg-j5y: calc(var(--rg-organic) * (0.8 * sin(0.0486 * var(--rg-t) + 5.072) + 0.4 * sin(0.0243 * var(--rg-t) + 6.191)));
+    --rg-j6x: calc(var(--rg-organic) * (0.8 * sin(0.0419 * var(--rg-t) + 2.277) + 0.4 * sin(0.0446 * var(--rg-t) + 2.354)));
+    --rg-j6y: calc(var(--rg-organic) * (0.8 * sin(0.0407 * var(--rg-t) + 1.281) + 0.4 * sin(0.0240 * var(--rg-t) + 5.955)));
+    --rg-j7x: calc(var(--rg-organic) * (0.8 * sin(0.0356 * var(--rg-t) + 6.242) + 0.4 * sin(0.0201 * var(--rg-t) + 1.689)));
+    --rg-j7y: calc(var(--rg-organic) * (0.8 * sin(0.0226 * var(--rg-t) + 4.864) + 0.4 * sin(0.0362 * var(--rg-t) + 3.083)));
+    --rg-j8x: calc(var(--rg-organic) * (0.8 * sin(0.0229 * var(--rg-t) + 1.650) + 0.4 * sin(0.0308 * var(--rg-t) + 0.709)));
+    --rg-j8y: calc(var(--rg-organic) * (0.8 * sin(0.0373 * var(--rg-t) + 0.109) + 0.4 * sin(0.0486 * var(--rg-t) + 0.062)));
+    --rg-j9x: calc(var(--rg-organic) * (0.8 * sin(0.0423 * var(--rg-t) + 1.985) + 0.4 * sin(0.0264 * var(--rg-t) + 1.425)));
+    --rg-j9y: calc(var(--rg-organic) * (0.8 * sin(0.0498 * var(--rg-t) + 1.343) + 0.4 * sin(0.0285 * var(--rg-t) + 0.603)));
+    --rg-j10x: calc(var(--rg-organic) * (0.8 * sin(0.0418 * var(--rg-t) + 1.512) + 0.4 * sin(0.0376 * var(--rg-t) + 4.485)));
+    --rg-j10y: calc(var(--rg-organic) * (0.8 * sin(0.0309 * var(--rg-t) + 1.634) + 0.4 * sin(0.0359 * var(--rg-t) + 0.943)));
+    --rg-j11x: calc(var(--rg-organic) * (0.8 * sin(0.0435 * var(--rg-t) + 0.145) + 0.4 * sin(0.0265 * var(--rg-t) + 2.857)));
+    --rg-j11y: calc(var(--rg-organic) * (0.8 * sin(0.0376 * var(--rg-t) + 3.847) + 0.4 * sin(0.0342 * var(--rg-t) + 4.182)));
+    --rg-j12x: calc(var(--rg-organic) * (0.8 * sin(0.0410 * var(--rg-t) + 5.493) + 0.4 * sin(0.0202 * var(--rg-t) + 6.252)));
+    --rg-j12y: calc(var(--rg-organic) * (0.8 * sin(0.0437 * var(--rg-t) + 5.265) + 0.4 * sin(0.0279 * var(--rg-t) + 5.048)));
+    --rg-j13x: calc(var(--rg-organic) * (0.8 * sin(0.0223 * var(--rg-t) + 3.092) + 0.4 * sin(0.0436 * var(--rg-t) + 2.326)));
+    --rg-j13y: calc(var(--rg-organic) * (0.8 * sin(0.0377 * var(--rg-t) + 2.619) + 0.4 * sin(0.0497 * var(--rg-t) + 1.794)));
+    --rg-j14x: calc(var(--rg-organic) * (0.8 * sin(0.0347 * var(--rg-t) + 1.472) + 0.4 * sin(0.0319 * var(--rg-t) + 6.075)));
+    --rg-j14y: calc(var(--rg-organic) * (0.8 * sin(0.0293 * var(--rg-t) + 0.667) + 0.4 * sin(0.0317 * var(--rg-t) + 1.407)));
+    --rg-s1: calc(var(--rg-organic) * (6 * sin(0.1499 * var(--rg-t) + 1.084) + 4 * sin(0.1796 * var(--rg-t) + 4.842)));
+    --rg-s2: calc(var(--rg-organic) * (6 * sin(0.1265 * var(--rg-t) + 5.343) + 4 * sin(0.1996 * var(--rg-t) + 2.022)));
+    --rg-s5: calc(var(--rg-organic) * (6 * sin(0.1132 * var(--rg-t) + 2.730) + 4 * sin(0.1083 * var(--rg-t) + 0.460)));
+    --rg-s6: calc(var(--rg-organic) * (6 * sin(0.1463 * var(--rg-t) + 0.323) + 4 * sin(0.1264 * var(--rg-t) + 4.924)));
+    --rg-s9: calc(var(--rg-organic) * (6 * sin(0.1006 * var(--rg-t) + 5.637) + 4 * sin(0.1304 * var(--rg-t) + 1.894)));
+    --rg-s10: calc(var(--rg-organic) * (6 * sin(0.1066 * var(--rg-t) + 5.330) + 4 * sin(0.1187 * var(--rg-t) + 0.637)));
+    --rg-s13: calc(var(--rg-organic) * (6 * sin(0.1092 * var(--rg-t) + 1.175) + 4 * sin(0.1354 * var(--rg-t) + 5.834)));
+    --rg-s14: calc(var(--rg-organic) * (6 * sin(0.1500 * var(--rg-t) + 0.710) + 4 * sin(0.1037 * var(--rg-t) + 3.660)));
+}
+
+/*
+ * MeshGradient 3x3 from the source, same point ranges, speeds and colors. CSS has no mesh gradient:
+ * the mesh is rebuilt as the average of two bilinear blends, one row by row (exact horizontal stops),
+ * one column by column (exact vertical stops), so every moving point drives its own color.
+ * Point (x, y) values are fractions of the box, as in SwiftUI.
+ */
+.rim-glow__mesh {
+    --rg-t: calc(var(--rg-time-base) + var(--rg-time-boost));
+    --rg-ox: calc(-0.5 + 0.3 * sin(0.342 * var(--rg-t) + 0.439));
+    --rg-oy: calc(0.5 + 0.2 * sin(0.984 * var(--rg-t) + 3.42));
+    --rg-rx: calc(0.45 + 0.35 * sin(0.084 * var(--rg-t) + 0.239));
+    --rg-ry: calc(0.5 + 0.3 * sin(0.242 * var(--rg-t) + 5.21));
+    --rg-bx: calc(1.25 + 0.25 * sin(0.084 * var(--rg-t) + 0.939));
+    --rg-by: calc(0.6 + 0.2 * sin(0.642 * var(--rg-t) + 0.25));
+    --rg-ix: calc(-0.4 + 0.4 * sin(0.442 * var(--rg-t) + 1.439));
+    --rg-iy: calc(1.65 + 0.25 * sin(0.984 * var(--rg-t) + 3.42));
+    --rg-gx: calc(0.45 + 0.15 * sin(0.784 * var(--rg-t) + 0.339));
+    --rg-gy: calc(1.1 + 0.1 * sin(0.772 * var(--rg-t) + 1.22));
+    --rg-mx: calc(1.25 + 0.25 * sin(0.056 * var(--rg-t) + 0.939));
+    --rg-my: calc(1.5 + 0.2 * sin(0.342 * var(--rg-t) + 0.47));
+
+    --rg-row1: calc((var(--rg-oy) + var(--rg-ry) + var(--rg-by)) / 3 * 100%);
+    --rg-row2: calc((var(--rg-iy) + var(--rg-gy) + var(--rg-my)) / 3 * 100%);
+    --rg-col0: calc((var(--rg-ox) + var(--rg-ix)) / 3 * 100%);
+    --rg-col1: calc((var(--rg-rx) + var(--rg-gx)) / 3 * 100%);
+    --rg-col2: calc((1 + var(--rg-bx) + var(--rg-mx)) / 3 * 100%);
+
+    position: absolute;
+    inset: var(--rg-pad);
+    scale: 1.3;
+    opacity: var(--rg-mesh-opacity);
+}
+
+/*
+ * Color flow (data-flow="clockwise" | "counterclockwise"), off by default: not in the source,
+ * where every color stays in its area. A conic gradient of the theme colors, laid out where the
+ * mesh shows them (purple top, blue right, green bottom, orange left, red at the top-left corner),
+ * turns over the mesh so the colors travel around the edges. --rim-glow-flow-duration is the time
+ * of a full turn, --rim-glow-flow-mix how much it covers the mesh (1 = fully).
+ */
+.rim-glow__flow {
+    position: absolute;
+    inset: 0;
+    display: none;
+    opacity: calc(var(--rg-mesh-opacity) * var(--rim-glow-flow-mix, 1));
+    background: conic-gradient(
+        from var(--rg-flow-angle),
+        var(--rg-purple),
+        var(--rg-indigo) 12.5%,
+        var(--rg-blue) 25%,
+        var(--rg-mint) 37.5%,
+        var(--rg-green) 50%,
+        var(--rg-indigo-2) 62.5%,
+        var(--rg-orange) 75%,
+        var(--rg-red) 87.5%,
+        var(--rg-purple)
+    );
+    animation: rg-flow var(--rim-glow-flow-duration, 12s) linear infinite;
+}
+
+.rim-glow[data-flow="clockwise"] .rim-glow__flow,
+.rim-glow[data-flow="counterclockwise"] .rim-glow__flow {
+    display: block;
+}
+
+.rim-glow[data-flow="counterclockwise"] .rim-glow__flow {
+    animation-direction: reverse;
+}
+
+@keyframes rg-flow {
+    to {
+        --rg-flow-angle: 360deg;
+    }
+}
+
+.rim-glow__rows,
+.rim-glow__cols,
+.rim-glow__rows > i,
+.rim-glow__cols > i {
+    position: absolute;
+    inset: 0;
+}
+
+.rim-glow__cols {
+    opacity: 0.5;
+}
+
+.rim-glow__rows > i:nth-child(1) {
+    background: linear-gradient(
+        to right,
+        var(--rg-orange) calc(var(--rg-ox) * 100%),
+        var(--rg-red) calc(var(--rg-rx) * 100%),
+        var(--rg-blue) calc(var(--rg-bx) * 100%)
+    );
+}
+
+.rim-glow__rows > i:nth-child(2) {
+    background: linear-gradient(to right, var(--rg-yellow) 0%, var(--rg-purple) 0%, var(--rg-indigo) 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, transparent var(--rg-row1));
+}
+
+.rim-glow__rows > i:nth-child(3) {
+    background: linear-gradient(
+        to right,
+        var(--rg-indigo-2) calc(var(--rg-ix) * 100%),
+        var(--rg-green) calc(var(--rg-gx) * 100%),
+        var(--rg-mint) calc(var(--rg-mx) * 100%)
+    );
+    mask-image: linear-gradient(to bottom, transparent var(--rg-row1), #000 var(--rg-row2));
+}
+
+.rim-glow__cols > i:nth-child(1) {
+    background: linear-gradient(
+        to bottom,
+        var(--rg-purple) 0%,
+        var(--rg-red) calc(var(--rg-ry) * 100%),
+        var(--rg-green) calc(var(--rg-gy) * 100%)
+    );
+}
+
+.rim-glow__cols > i:nth-child(2) {
+    background: linear-gradient(
+        to bottom,
+        var(--rg-yellow) 0%,
+        var(--rg-orange) calc(var(--rg-oy) * 100%),
+        var(--rg-indigo-2) calc(var(--rg-iy) * 100%)
+    );
+    mask-image: linear-gradient(to right, #000 var(--rg-col0), transparent var(--rg-col1));
+}
+
+.rim-glow__cols > i:nth-child(3) {
+    background: linear-gradient(
+        to bottom,
+        var(--rg-indigo) 0%,
+        var(--rg-blue) calc(var(--rg-by) * 100%),
+        var(--rg-mint) calc(var(--rg-my) * 100%)
+    );
+    mask-image: linear-gradient(to right, transparent var(--rg-col1), #000 var(--rg-col2));
+}
+
+/*
+ * Source: 4 px white stroke, blur 4, drawn under the masked content. That content covers about 40 %
+ * of the stroke at the very edge, hence the default opacity. The corners follow the element's own
+ * border-radius (the source screen's 52 pt corners) unless --rim-glow-radius sets a fixed value.
+ */
+.rim-glow__rim {
+    position: absolute;
+    inset: -2px;
+    border: 4px solid var(--rim-glow-rim-color, #fff);
+    border-radius: var(--rim-glow-radius, inherit);
+    filter: blur(4px);
+    opacity: 0;
+    transition: opacity var(--rg-duration) var(--rg-easing);
+}
+
+.rim-glow[data-active] .rim-glow__rim {
+    opacity: var(--rim-glow-rim-opacity, 0.6);
+}
+
+/*
+ * Light wave of the source Metal shader: brightness += 0.3 * sin(15τ) * exp(-8τ), 2000 px/s, 3 s.
+ * The light lobe is added (plus-lighter), the faint dark lobe behind it is laid over.
+ * Stops generated by scripts/ripple-stops.mjs.
+ */
+.rim-glow__ripple {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+    visibility: hidden;
+}
+
+.rim-glow__ripple::before,
+.rim-glow__ripple::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: var(--rim-glow-ripple-intensity, 1);
+}
+
+.rim-glow__ripple::before {
+    mix-blend-mode: plus-lighter;
+    background: radial-gradient(
+        circle at var(--rim-glow-ripple-x, 50%) var(--rim-glow-ripple-y, 50%),
+        rgb(255 255 255 / 0) calc(var(--rg-ripple-r) - 418.9px),
+        rgb(255 255 255 / 0.0189) calc(var(--rg-ripple-r) - 380px),
+        rgb(255 255 255 / 0.0429) calc(var(--rg-ripple-r) - 340px),
+        rgb(255 255 255 / 0.0703) calc(var(--rg-ripple-r) - 300px),
+        rgb(255 255 255 / 0.0985) calc(var(--rg-ripple-r) - 260px),
+        rgb(255 255 255 / 0.124) calc(var(--rg-ripple-r) - 220px),
+        rgb(255 255 255 / 0.1425) calc(var(--rg-ripple-r) - 180px),
+        rgb(255 255 255 / 0.1487) calc(var(--rg-ripple-r) - 144px),
+        rgb(255 255 255 / 0.1454) calc(var(--rg-ripple-r) - 120px),
+        rgb(255 255 255 / 0.1308) calc(var(--rg-ripple-r) - 90px),
+        rgb(255 255 255 / 0.1026) calc(var(--rg-ripple-r) - 60px),
+        rgb(255 255 255 / 0.0693) calc(var(--rg-ripple-r) - 36px),
+        rgb(255 255 255 / 0.0337) calc(var(--rg-ripple-r) - 16px),
+        rgb(255 255 255 / 0) var(--rg-ripple-r)
+    );
+}
+
+.rim-glow__ripple::after {
+    background: radial-gradient(
+        circle at var(--rim-glow-ripple-x, 50%) var(--rim-glow-ripple-y, 50%),
+        rgb(0 0 0 / 0) calc(var(--rg-ripple-r) - 837.8px),
+        rgb(0 0 0 / 0.0056) calc(var(--rg-ripple-r) - 780px),
+        rgb(0 0 0 / 0.013) calc(var(--rg-ripple-r) - 720px),
+        rgb(0 0 0 / 0.0208) calc(var(--rg-ripple-r) - 660px),
+        rgb(0 0 0 / 0.0259) calc(var(--rg-ripple-r) - 610px),
+        rgb(0 0 0 / 0.0278) calc(var(--rg-ripple-r) - 563px),
+        rgb(0 0 0 / 0.0258) calc(var(--rg-ripple-r) - 520px),
+        rgb(0 0 0 / 0.0171) calc(var(--rg-ripple-r) - 470px),
+        rgb(0 0 0 / 0) calc(var(--rg-ripple-r) - 418.9px)
+    );
+}
+
+/* Without the script, the wave plays on activation. The custom element sets data-ripple="manual". */
+:where(.rim-glow[data-active]:not([data-ripple])) .rim-glow__ripple {
+    animation: rg-ripple-a calc(3s / var(--rg-ripple-speed)) linear;
+}
+
+.rim-glow[data-rippling="a"] .rim-glow__ripple {
+    animation: rg-ripple-a calc(3s / var(--rg-ripple-speed)) linear var(--rg-ripple-delay, 0s);
+}
+
+.rim-glow[data-rippling="b"] .rim-glow__ripple {
+    animation: rg-ripple-b calc(3s / var(--rg-ripple-speed)) linear var(--rg-ripple-delay, 0s);
+}
+
+/*
+ * CSS distortion (data-distort="css"): the wave's lens as a scale of the content toward the press
+ * point, with the source curve sin(15t) * exp(-8t), normalized: smallest at 72 ms (1 % with
+ * --rim-glow-distort: 1, 0.7 by default), small rebound, still after 0.6 s. Smooth everywhere, but the whole
+ * content moves at once instead of following the wave front.
+ */
+@keyframes rg-pulse-a {
+    0% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0000);
+    }
+
+    4.17% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.6049);
+    }
+
+    8.33% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.9216);
+    }
+
+    12.5% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.9988);
+    }
+
+    16.67% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.9040);
+    }
+
+    20.83% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.7079);
+    }
+
+    25% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.4727);
+    }
+
+    29.17% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.2457);
+    }
+
+    33.33% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0575);
+    }
+
+    37.5% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.0771);
+    }
+
+    41.67% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.1560);
+    }
+
+    45.83% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.1860);
+    }
+
+    50% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.1789);
+    }
+
+    54.17% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.1478);
+    }
+
+    58.33% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.1054);
+    }
+
+    62.5% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.0614);
+    }
+
+    66.67% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.0230);
+    }
+
+    70.83% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0062);
+    }
+
+    75% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0248);
+    }
+
+    79.17% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0337);
+    }
+
+    83.33% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0347);
+    }
+
+    87.5% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0302);
+    }
+
+    91.67% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0228);
+    }
+
+    95.83% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0145);
+    }
+
+    100% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0068);
+    }
+}
+
+@keyframes rg-pulse-b {
+    0% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0000);
+    }
+
+    4.17% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.6049);
+    }
+
+    8.33% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.9216);
+    }
+
+    12.5% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.9988);
+    }
+
+    16.67% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.9040);
+    }
+
+    20.83% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.7079);
+    }
+
+    25% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.4727);
+    }
+
+    29.17% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.2457);
+    }
+
+    33.33% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0575);
+    }
+
+    37.5% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.0771);
+    }
+
+    41.67% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.1560);
+    }
+
+    45.83% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.1860);
+    }
+
+    50% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.1789);
+    }
+
+    54.17% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.1478);
+    }
+
+    58.33% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.1054);
+    }
+
+    62.5% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.0614);
+    }
+
+    66.67% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * -0.0230);
+    }
+
+    70.83% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0062);
+    }
+
+    75% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0248);
+    }
+
+    79.17% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0337);
+    }
+
+    83.33% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0347);
+    }
+
+    87.5% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0302);
+    }
+
+    91.67% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0228);
+    }
+
+    95.83% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0145);
+    }
+
+    100% {
+        scale: calc(1 - var(--rim-glow-distort, 0.7) * 0.01 * 0.0068);
+    }
+}
+
+.rim-glow[data-distort="css"] .rim-glow__content {
+    transform-origin: var(--rim-glow-ripple-x, 50%) var(--rim-glow-ripple-y, 50%);
+}
+
+:where(.rim-glow[data-distort="css"][data-active]:not([data-ripple])) .rim-glow__content {
+    animation: rg-pulse-a 0.6s linear;
+}
+
+.rim-glow[data-distort="css"][data-rippling="a"] .rim-glow__content {
+    animation: rg-pulse-a 0.6s linear;
+}
+
+.rim-glow[data-distort="css"][data-rippling="b"] .rim-glow__content {
+    animation: rg-pulse-b 0.6s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rim-glow[data-active] .rim-glow__glow {
+        animation-play-state: paused, paused, paused, paused;
+    }
+
+    .rim-glow .rim-glow__flow {
+        animation-play-state: paused;
+    }
+
+    .rim-glow .rim-glow__ripple {
+        animation: none !important;
+    }
+
+    .rim-glow .rim-glow__content {
+        animation: none !important;
+    }
+}

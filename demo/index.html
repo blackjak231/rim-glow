@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>rim-glow demo</title>
+        <link rel="stylesheet" href="./demo.css" />
+        <script src="../dist/rim-glow.iife.js"></script>
+    </head>
+    <body>
+        <main class="stage">
+            <div class="cards">
+                <figure class="cards__item">
+                    <rim-glow class="demo-card card--square" data-card="photo">
+                        <div class="card card--photo">
+                            <div class="scrim"></div>
+                            <p class="card__status">Retouching…</p>
+                            <button class="action" type="button" data-action="retouch">Retouch photo</button>
+                        </div>
+                    </rim-glow>
+                    <figcaption class="credit">Photo by Kevin Young on <a href="https://unsplash.com/photos/-icmOdYWXuQ">Unsplash</a></figcaption>
+                </figure>
+
+                <rim-glow class="demo-card cards__item" data-card="text">
+                    <div class="card card--text">
+                        <p class="card__label">Draft</p>
+                        <p class="card__text" data-text></p>
+                        <button class="action" type="button" data-action="improve">Improve writing</button>
+                    </div>
+                </rim-glow>
+
+                <rim-glow class="demo-card cards__item" data-card="assistant">
+                    <div class="card card--assistant">
+                        <p class="card__label">Assistant</p>
+                        <p class="card__hint">Click the field: the glow stays on while it has focus.</p>
+                        <form class="ask" data-ask>
+                            <input class="ask__input" type="text" placeholder="Ask anything…" aria-label="Ask anything" />
+                            <button class="ask__send" type="submit" aria-label="Send">↑</button>
+                        </form>
+                    </div>
+                </rim-glow>
+
+                <rim-glow class="demo-card card--square cards__item" data-card="voice">
+                    <div class="card card--voice">
+                        <div class="scrim"></div>
+                        <div class="screen__stack">
+                            <p class="prompt">What are you looking for?</p>
+                            <button class="toggle-button" type="button" aria-label="Toggle the glow">
+                                <svg class="icon icon--mic" viewBox="0 0 32 32" aria-hidden="true">
+                                    <rect x="11" y="3" width="10" height="17" rx="5" />
+                                    <path d="M6.5 15.5a9.5 9.5 0 0 0 19 0M16 25v4.5" />
+                                </svg>
+                                <svg class="icon icon--pause" viewBox="0 0 32 32" aria-hidden="true">
+                                    <path d="M11 6v20M21 6v20" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </rim-glow>
+            </div>
+        </main>
+
+        <button class="panel-toggle" type="button" aria-controls="panel" aria-expanded="true">Hide</button>
+
+        <aside class="panel" id="panel" aria-label="Settings">
+            <header class="panel__header">
+                <h2>Settings</h2>
+                <button class="panel__reset" type="button" data-action="reset">Reset all</button>
+            </header>
+            <div class="panel__body" data-sections></div>
+            <section class="panel__section">
+                <h3>Code</h3>
+                <pre class="panel__code"><code data-code></code></pre>
+                <button class="panel__button" type="button" data-action="copy">Copy</button>
+            </section>
+        </aside>
+
+        <script src="./panel.js"></script>
+        <script src="./cards.js"></script>
+    </body>
+</html>
